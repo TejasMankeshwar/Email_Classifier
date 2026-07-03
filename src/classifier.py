@@ -222,7 +222,9 @@ def _classify_batch_call(
             else:
                 raise
 
-    raise last_exception
+    if last_exception is not None:
+        raise last_exception
+    raise RuntimeError("Batch classification failed without raising any exceptions.")
 
 
 def _parse_retry_delay(error_str: str, default: float = 20.0) -> float:
