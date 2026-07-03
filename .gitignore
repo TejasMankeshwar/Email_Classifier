@@ -1,0 +1,11 @@
+# G-lassify
+.env
+credentials.json
+token.json
+__pycache__/
+*.pyc
+venv/
+.venv/
+*.log
+logs/
+.DS_Store

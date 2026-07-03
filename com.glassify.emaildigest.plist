@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.glassify.emaildigest</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <!-- IMPORTANT: Update these paths to match your setup -->
+        <!-- Find your python path with: which python3 (from inside your venv) -->
+        <string>/Users/tejasmankeshwar/Developer/Projects/Email_Classifier/venv/bin/python</string>
+        <string>-m</string>
+        <string>src.main</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/tejasmankeshwar/Developer/Projects/Email_Classifier</string>
+
+    <!-- Run every day at 7:00 AM -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>7</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- Logging -->
+    <key>StandardOutPath</key>
+    <string>/Users/tejasmankeshwar/Library/Logs/glassify/stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/tejasmankeshwar/Library/Logs/glassify/stderr.log</string>
+
+    <!-- Keep alive settings -->
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

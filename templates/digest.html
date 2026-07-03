@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daily Email Summary – {{ date_short }}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+
+  <!-- Wrapper -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f0f2f5; padding: 24px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width: 640px; width: 100%;">
+
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); padding: 32px 40px; border-radius: 16px 16px 0 0;">
+              <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 700; color: #ffffff; letter-spacing: -0.5px;">
+                📬 G-lassify
+              </h1>
+              <p style="margin: 0; font-size: 16px; color: #a0aec0; font-weight: 400;">
+                Daily Email Summary – {{ date }}
+              </p>
+              <p style="margin: 8px 0 0 0; font-size: 14px; color: #718096;">
+                {{ total_count }} email{{ 's' if total_count != 1 else '' }} analyzed
+              </p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="background-color: #ffffff; padding: 0;">
+
+              {% if urgent_emails %}
+              <!-- 🚨 Important & Urgent -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="padding: 28px 40px 8px 40px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="border-left: 4px solid #e53e3e; padding-left: 16px;">
+                          <h2 style="margin: 0; font-size: 18px; font-weight: 700; color: #e53e3e;">
+                            🚨 Important &amp; Urgent
+                          </h2>
+                          <p style="margin: 4px 0 0 0; font-size: 12px; color: #a0aec0; text-transform: uppercase; letter-spacing: 1px;">
+                            Requires action today
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                {% for item in urgent_emails %}
+                <tr>
+                  <td style="padding: 12px 40px 12px 60px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #fff5f5; border-radius: 10px; border: 1px solid #fed7d7;">
+                      <tr>
+                        <td style="padding: 16px 20px;">
+                          <a href="{{ item.email.gmail_url }}" style="text-decoration: none; color: inherit;">
+                            <p style="margin: 0 0 4px 0; font-size: 15px; font-weight: 700; color: #1a202c;">
+                              {{ item.email.sender_name }}
+                            </p>
+                            <p style="margin: 0 0 8px 0; font-size: 14px; color: #4a5568;">
+                              {{ item.classification.summary }}
+                            </p>
+                          </a>
+                          {% if item.classification.action_items %}
+                          {% for action in item.classification.action_items %}
+                          <p style="margin: 2px 0; font-size: 13px; color: #e53e3e;">
+                            → {{ action }}
+                          </p>
+                          {% endfor %}
+                          {% endif %}
+                          <a href="{{ item.email.gmail_url }}" style="display: inline-block; margin-top: 8px; font-size: 12px; color: #e53e3e; text-decoration: none; font-weight: 600;">View in Gmail →</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                {% endfor %}
+              </table>
+              {% endif %}
+
+              {% if important_emails %}
+              <!-- 📌 Important & Not Urgent -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="padding: 28px 40px 8px 40px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="border-left: 4px solid #3182ce; padding-left: 16px;">
+                          <h2 style="margin: 0; font-size: 18px; font-weight: 700; color: #3182ce;">
+                            📌 Important &amp; Not Urgent
+                          </h2>
+                          <p style="margin: 4px 0 0 0; font-size: 12px; color: #a0aec0; text-transform: uppercase; letter-spacing: 1px;">
+                            Worth reviewing later
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                {% for item in important_emails %}
+                <tr>
+                  <td style="padding: 12px 40px 12px 60px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #ebf8ff; border-radius: 10px; border: 1px solid #bee3f8;">
+                      <tr>
+                        <td style="padding: 16px 20px;">
+                          <a href="{{ item.email.gmail_url }}" style="text-decoration: none; color: inherit;">
+                            <p style="margin: 0 0 4px 0; font-size: 15px; font-weight: 700; color: #1a202c;">
+                              {{ item.email.sender_name }}
+                            </p>
+                            <p style="margin: 0; font-size: 14px; color: #4a5568;">
+                              {{ item.classification.summary }}
+                            </p>
+                          </a>
+                          {% if item.classification.action_items %}
+                          {% for action in item.classification.action_items %}
+                          <p style="margin: 2px 0; font-size: 13px; color: #3182ce;">
+                            → {{ action }}
+                          </p>
+                          {% endfor %}
+                          {% endif %}
+                          <a href="{{ item.email.gmail_url }}" style="display: inline-block; margin-top: 8px; font-size: 12px; color: #3182ce; text-decoration: none; font-weight: 600;">View in Gmail →</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                {% endfor %}
+              </table>
+              {% endif %}
+
+              {% if not_important_summary %}
+              <!-- 📨 Not Important -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="padding: 28px 40px 8px 40px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="border-left: 4px solid #a0aec0; padding-left: 16px;">
+                          <h2 style="margin: 0; font-size: 18px; font-weight: 700; color: #718096;">
+                            📨 Not Important
+                          </h2>
+                          <p style="margin: 4px 0 0 0; font-size: 12px; color: #a0aec0; text-transform: uppercase; letter-spacing: 1px;">
+                            Low priority
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 40px 12px 60px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f7fafc; border-radius: 10px; border: 1px solid #e2e8f0;">
+                      <tr>
+                        <td style="padding: 16px 20px;">
+                          {% for item in not_important_summary %}
+                          <p style="margin: 4px 0; font-size: 14px; color: #718096;">
+                            • {{ item.count }} {{ item.label }}
+                          </p>
+                          {% endfor %}
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              {% endif %}
+
+              <!-- Divider -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="padding: 24px 40px;">
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 0;">
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Executive Summary -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="padding: 0 40px 32px 40px;">
+                    <h2 style="margin: 0 0 12px 0; font-size: 18px; font-weight: 700; color: #1a202c;">
+                      📊 Executive Summary
+                    </h2>
+                    <p style="margin: 0; font-size: 14px; color: #4a5568; line-height: 1.7;">
+                      {{ executive_summary }}
+                    </p>
+
+                    <!-- Stats Bar -->
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top: 16px;">
+                      <tr>
+                        <td align="center" style="padding: 12px; background-color: #fff5f5; border-radius: 8px; width: 33%;">
+                          <p style="margin: 0; font-size: 24px; font-weight: 800; color: #e53e3e;">{{ urgent_count }}</p>
+                          <p style="margin: 2px 0 0 0; font-size: 11px; color: #e53e3e; text-transform: uppercase; letter-spacing: 0.5px;">Urgent</p>
+                        </td>
+                        <td width="8"></td>
+                        <td align="center" style="padding: 12px; background-color: #ebf8ff; border-radius: 8px; width: 33%;">
+                          <p style="margin: 0; font-size: 24px; font-weight: 800; color: #3182ce;">{{ important_count }}</p>
+                          <p style="margin: 2px 0 0 0; font-size: 11px; color: #3182ce; text-transform: uppercase; letter-spacing: 0.5px;">Important</p>
+                        </td>
+                        <td width="8"></td>
+                        <td align="center" style="padding: 12px; background-color: #f7fafc; border-radius: 8px; width: 33%;">
+                          <p style="margin: 0; font-size: 24px; font-weight: 800; color: #718096;">{{ not_important_count }}</p>
+                          <p style="margin: 2px 0 0 0; font-size: 11px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px;">Low Priority</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #1a202c; padding: 24px 40px; border-radius: 0 0 16px 16px;">
+              <p style="margin: 0; font-size: 13px; color: #718096; text-align: center;">
+                Generated by <strong style="color: #a0aec0;">G-lassify</strong> · Your Personal AI Email Assistant
+              </p>
+              <p style="margin: 8px 0 0 0; font-size: 12px; color: #4a5568; text-align: center;">
+                Powered by Gemini 2.5 Flash · {{ date }}
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>
