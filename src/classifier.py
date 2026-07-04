@@ -290,15 +290,9 @@ def classify_batch(emails: list[EmailData]) -> list[ClassifiedEmail]:
 
         except Exception as e:
             logger.error(f"Batch {batch_num + 1}/{num_batches} failed: {e}")
-            # Mark all emails in this batch as failed
-            for i in range(start, end):
-                all_classifications[i] = SingleEmailClassification(
-                    email_index=i,
-                    priority="Not Important",
-                    summary=f"Classification failed: {emails[i].snippet or emails[i].subject}",
-                    action_items=[],
-                    category="general",
-                )
+            raise RuntimeError(
+                "Gemini API quota or limit exhausted. Workflow could not be completed."
+            ) from e
 
         # Brief pause between batches to respect rate limits
         if batch_num < num_batches - 1:
