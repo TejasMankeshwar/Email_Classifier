@@ -149,8 +149,9 @@ Here are the emails to classify:
 
 
 # Rough estimate: ~500 chars per email summary sent to LLM
-# Gemini 2.5 Flash has ~1M token context, but we stay conservative
-MAX_EMAILS_PER_BATCH = 25  # Keep batches manageable
+# Gemini 2.5 Flash has ~1M token context, but we use a larger batch size
+# of 50 to minimize multi-batch rate limiting issues on the free tier.
+MAX_EMAILS_PER_BATCH = 50  # Keep batches manageable
 
 
 def _get_client() -> genai.Client:
