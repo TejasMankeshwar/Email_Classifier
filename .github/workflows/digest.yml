@@ -1,0 +1,58 @@
+name: Send Daily Email Digest
+
+on:
+  schedule:
+    # Runs daily at 7:00 AM IST (1:30 AM UTC)
+    - cron: '30 1 * * *'
+  workflow_dispatch: # Allows manual runs from the GitHub Actions tab
+
+concurrency:
+  group: email-digest
+  cancel-in-progress: false
+
+jobs:
+  run-digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Create credentials.json
+        run: |
+          cat <<'__GMAIL_CREDENTIALS_EOF__' > credentials.json
+          ${{ secrets.GMAIL_CREDENTIALS_JSON }}
+          __GMAIL_CREDENTIALS_EOF__
+
+      - name: Create token.json
+        run: |
+          cat <<'__GMAIL_TOKEN_EOF__' > token.json
+          ${{ secrets.GMAIL_TOKEN_JSON }}
+          __GMAIL_TOKEN_EOF__
+
+      - name: Run G-lassify Digest
+        run: |
+          mkdir -p logs
+          python -m src.main 2>&1 | tee logs/glassify.log
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          LOG_LEVEL: INFO
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: glassify-logs
+          path: logs/
