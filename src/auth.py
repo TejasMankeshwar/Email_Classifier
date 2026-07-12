@@ -33,7 +33,21 @@ def get_gmail_service():
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             logger.info("Refreshing expired credentials...")
-            creds.refresh(Request())
+            from google.auth.exceptions import RefreshError
+            try:
+                creds.refresh(Request())
+            except RefreshError as e:
+                logger.error(f"Failed to refresh credentials: {e}")
+                logger.error(
+                    "This usually means the refresh token has expired or been revoked.\n"
+                    "If your Google Cloud OAuth app is in 'Testing' mode, tokens expire after 7 days.\n"
+                    "To fix this:\n"
+                    "  1. Go to Google Cloud Console -> APIs & Services -> OAuth consent screen.\n"
+                    "  2. Change publishing status to 'In Production' so tokens don't expire.\n"
+                    "  3. Delete token.json and run setup_auth.py locally to generate a new token.\n"
+                    "  4. Update the GMAIL_TOKEN_JSON secret on GitHub."
+                )
+                raise e
         else:
             if not CREDENTIALS_FILE.exists():
                 raise FileNotFoundError(
