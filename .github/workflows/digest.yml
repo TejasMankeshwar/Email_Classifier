@@ -2,10 +2,10 @@ name: Send Daily Email Digest
 
 on:
   schedule:
-    # Scheduled for 3:00 AM IST (9:30 PM UTC previous day) to arrive around 7:00 AM IST
-    # due to typical GitHub Actions cron trigger delays (~4 hours).
-    - cron: '30 21 * * *'
-  workflow_dispatch: # Allows manual runs from the GitHub Actions tab
+  - cron: '0 6 * * *'
+    timezone: 'America/New_York'
+
+  workflow_dispatch:
 
 concurrency:
   group: email-digest
