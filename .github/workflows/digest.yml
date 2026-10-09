@@ -42,6 +42,12 @@ jobs:
           ${{ secrets.GMAIL_TOKEN_JSON }}
           __GMAIL_TOKEN_EOF__
 
+      - name: Create token_umass.json
+        run: |
+          cat <<'__GMAIL_TOKEN_UMASS_EOF__' > token_umass.json
+          ${{ secrets.GMAIL_TOKEN_UMASS_JSON }}
+          __GMAIL_TOKEN_UMASS_EOF__
+
       - name: Run G-lassify Digest
         run: |
           mkdir -p logs

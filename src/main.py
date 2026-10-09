@@ -24,78 +24,62 @@ from src.digest_builder import build_digest
 from src.gmail_sender import send_digest
 
 
-def main():
-    """Run the G-lassify email classification pipeline."""
-    parser = argparse.ArgumentParser(
-        description="G-lassify — Personal AI Email Classifier",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""\
-Examples:
-  python -m src.main                  # Run normally (classify & send digest)
-  python -m src.main --dry-run        # Print digest to stdout, don't send
-  python -m src.main --hours 48       # Look back 48 hours instead of 24
-  python -m src.main --dry-run --hours 2  # Quick test with last 2 hours
-        """,
-    )
-    parser.add_argument(
-        "--hours",
-        type=int,
-        default=24,
-        help="Number of hours to look back for emails (default: 24)",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print the HTML digest to stdout instead of sending it",
-    )
-    args = parser.parse_args()
+def run_account_pipeline(token_path: Path, args) -> bool:
+    """Run the classification pipeline for a single token file."""
+    logger.info("-" * 50)
+    logger.info(f"Processing Account Token: {token_path.name}")
+    logger.info("-" * 50)
 
-    # ── Banner ─────────────────────────────────────────────────────────────
-    logger.info("=" * 50)
-    logger.info("  G-lassify — Personal AI Email Classifier")
-    logger.info("=" * 50)
+    # Step 1: Authenticate with Gmail
+    service = get_gmail_service(token_file=token_path)
 
-    # ── Step 1: Validate config ────────────────────────────────────────────
-    validate_config()
+    # Step 2: Fetch profile to get account email
+    auth_email = ""
+    try:
+        profile = service.users().getProfile(userId="me").execute()
+        auth_email = profile.get("emailAddress", "")
+        logger.info(f"Authenticated Account: {auth_email}")
+    except Exception as e:
+        logger.warning(f"Could not retrieve profile info for {token_path.name}: {e}")
 
-    # ── Step 2: Authenticate with Gmail ────────────────────────────────────
-    logger.info("Authenticating with Gmail...")
-    service = get_gmail_service()
+    # Determine recipient email (defaulting to the authenticated account's email)
+    recipient = args.to or auth_email or GMAIL_ADDRESS
+    if not recipient and not args.dry_run:
+        logger.error(f"No recipient email address available for {token_path.name}.")
+        return False
 
-    # ── Step 3: Fetch recent emails ────────────────────────────────────────
+    # Step 3: Fetch recent emails
     logger.info(f"Fetching emails from the last {args.hours} hours...")
     emails = fetch_recent_emails(service, hours=args.hours)
 
+    now = datetime.now()
     if not emails:
-        logger.info("No emails found in the specified time window.")
+        logger.info(f"No emails found for {auth_email or token_path.name}.")
         if not args.dry_run:
-            # Send a "no emails" digest
-            now = datetime.now()
             no_email_html = _build_no_email_digest(now)
-            send_digest(service, GMAIL_ADDRESS, no_email_html, now.strftime("%B %d"))
-            logger.info("Sent 'no new emails' digest.")
-        return
+            send_digest(service, recipient, no_email_html, now.strftime("%B %d"))
+            logger.info(f"Sent 'no new emails' digest to {recipient}.")
+        return True
 
     logger.info(f"Retrieved {len(emails)} emails. Starting classification...")
 
-    # ── Step 4: Classify emails ────────────────────────────────────────────
+    # Step 4: Classify emails
     classified = classify_batch(emails)
 
-    # ── Step 5: Build digest ───────────────────────────────────────────────
-    now = datetime.now()
+    # Step 5: Build digest
     html_digest = build_digest(classified, date=now)
 
-    # ── Step 6: Send or print ──────────────────────────────────────────────
+    # Step 6: Send or print
     if args.dry_run:
-        logger.info("DRY RUN — Printing digest HTML to stdout")
+        logger.info(f"DRY RUN — Digest for {auth_email or token_path.name}")
         print("\n" + "=" * 60)
-        print("  DIGEST PREVIEW (HTML)")
+        print(f"  DIGEST PREVIEW ({auth_email or token_path.name})")
         print("=" * 60 + "\n")
         print(html_digest)
         print("\n" + "=" * 60)
 
         # Also print a text summary
-        print("\n  CLASSIFICATION SUMMARY:\n")
+        print(f"\n  CLASSIFICATION SUMMARY ({auth_email or token_path.name}):\n")
         for ce in classified:
             icon = {"Important & Urgent": "🚨", "Important & Not Urgent": "📌", "Not Important": "📨"}.get(
                 ce.classification.priority, "•"
@@ -110,14 +94,105 @@ Examples:
             print()
     else:
         date_str = now.strftime("%B %d")
-        result = send_digest(service, GMAIL_ADDRESS, html_digest, date_str)
+        result = send_digest(service, recipient, html_digest, date_str)
         if result:
-            logger.info(f"🎉 Daily digest sent to {GMAIL_ADDRESS}")
+            logger.info(f"🎉 Daily digest sent to {recipient}")
         else:
-            logger.error("Failed to send the daily digest.")
-            sys.exit(1)
+            logger.error(f"Failed to send daily digest for {auth_email or token_path.name}.")
+            return False
 
-    logger.info("G-lassify run complete.")
+    return True
+
+
+def main():
+    """Run the G-lassify email classification pipeline."""
+    parser = argparse.ArgumentParser(
+        description="G-lassify — Personal AI Email Classifier",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""\
+Examples:
+  python -m src.main                             # Run sequentially for all configured accounts
+  python -m src.main --account umass             # Run specifically for token_umass.json
+  python -m src.main --all-accounts              # Run for all token*.json files
+  python -m src.main --dry-run                   # Print digest to stdout, don't send
+  python -m src.main --hours 48                  # Look back 48 hours instead of 24
+        """,
+    )
+    parser.add_argument(
+        "--hours",
+        type=int,
+        default=24,
+        help="Number of hours to look back for emails (default: 24)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the HTML digest to stdout instead of sending it",
+    )
+    parser.add_argument(
+        "--account",
+        type=str,
+        default=None,
+        help="Account identifier/label (e.g. 'work' loads 'token_work.json')",
+    )
+    parser.add_argument(
+        "--token-file",
+        type=str,
+        default=None,
+        help="Custom path or filename for OAuth token (default: token.json)",
+    )
+    parser.add_argument(
+        "--all-accounts",
+        action="store_true",
+        help="Run digest sequentially for all configured token files (token*.json)",
+    )
+    parser.add_argument(
+        "--to",
+        type=str,
+        default=None,
+        help="Override recipient email address for sending digest",
+    )
+    args = parser.parse_args()
+
+    # ── Banner ─────────────────────────────────────────────────────────────
+    logger.info("=" * 50)
+    logger.info("  G-lassify — Personal AI Email Classifier")
+    logger.info("=" * 50)
+
+    # ── Step 1: Validate config ────────────────────────────────────────────
+    validate_config()
+
+    from src.config import PROJECT_ROOT
+
+    # Determine token files to process
+    token_paths = []
+    if args.token_file:
+        tp = Path(args.token_file)
+        token_paths.append(tp if tp.is_absolute() else PROJECT_ROOT / tp)
+    elif args.account:
+        token_paths.append(PROJECT_ROOT / f"token_{args.account}.json")
+    else:
+        # Default behavior: discover all token*.json files
+        discovered = sorted(PROJECT_ROOT.glob("token*.json"))
+        if discovered:
+            token_paths = discovered
+        else:
+            token_paths = [PROJECT_ROOT / "token.json"]
+
+    logger.info(f"Accounts to process ({len(token_paths)}): {[t.name for t in token_paths]}")
+
+    success_count = 0
+    for tp in token_paths:
+        if not tp.exists():
+            logger.error(f"Token file not found: {tp.name}. Run setup_auth.py to create it.")
+            continue
+        if run_account_pipeline(tp, args):
+            success_count += 1
+
+    logger.info("=" * 50)
+    logger.info(f"G-lassify run complete. Successfully processed {success_count}/{len(token_paths)} account(s).")
+    logger.info("=" * 50)
+
 
 
 def _build_no_email_digest(date: datetime) -> str:

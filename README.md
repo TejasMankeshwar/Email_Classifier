@@ -142,20 +142,44 @@ tail -f ~/Library/Logs/glassify/stderr.log
 
 ---
 
+## 🎯 Multi-Account Setup
+
+You can use G-lassify with multiple Gmail accounts (e.g., personal and work emails):
+
+### 1. Authenticate Second Account
+Run `setup_auth.py` with the `--account` parameter (e.g. `--account work` creates `token_work.json`):
+
+```bash
+python setup_auth.py --account work
+```
+*Your browser will open. Log into your second Gmail account to authorize.*
+
+### 2. Run Classifier for the Second Account
+Run the main script referencing the second account:
+
+```bash
+python -m src.main --account work
+```
+
+---
+
 ## 🎯 CLI Options
 
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--hours N` | Look back N hours for emails | `24` |
 | `--dry-run` | Print digest to terminal, don't send | `false` |
+| `--account NAME` | Account identifier/label (e.g. `work` loads `token_work.json`) | `None` |
+| `--token-file PATH` | Custom OAuth token filename/path | `token.json` |
+| `--to EMAIL` | Override recipient email for sending digest | `GMAIL_ADDRESS` |
 
 **Examples:**
 
 ```bash
-python -m src.main                      # Normal run
-python -m src.main --dry-run            # Preview without sending
-python -m src.main --hours 48           # Last 48 hours
-python -m src.main --dry-run --hours 2  # Quick test
+python -m src.main                             # Primary account run
+python -m src.main --account work              # Secondary account run (uses token_work.json)
+python -m src.main --account work --dry-run   # Preview second account without sending
+python -m src.main --hours 48                  # Last 48 hours
 ```
 
 ---
