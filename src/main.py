@@ -64,7 +64,14 @@ def run_account_pipeline(token_path: Path, args) -> bool:
     logger.info(f"Retrieved {len(emails)} emails. Starting classification...")
 
     # Step 4: Classify emails
-    classified = classify_batch(emails)
+    try:
+        classified = classify_batch(emails)
+    except Exception as e:
+        logger.error(
+            f"Failed during email classification for {auth_email or token_path.name}: {e}",
+            exc_info=True,
+        )
+        return False
 
     # Step 5: Build digest
     html_digest = build_digest(classified, date=now)
@@ -186,12 +193,21 @@ Examples:
         if not tp.exists():
             logger.error(f"Token file not found: {tp.name}. Run setup_auth.py to create it.")
             continue
-        if run_account_pipeline(tp, args):
-            success_count += 1
+        try:
+            if run_account_pipeline(tp, args):
+                success_count += 1
+        except Exception as e:
+            logger.error(f"Unhandled error processing account {tp.name}: {e}", exc_info=True)
 
     logger.info("=" * 50)
     logger.info(f"G-lassify run complete. Successfully processed {success_count}/{len(token_paths)} account(s).")
     logger.info("=" * 50)
+
+    if success_count < len(token_paths):
+        logger.warning(
+            f"Run completed with errors: only {success_count} of {len(token_paths)} account(s) succeeded."
+        )
+        sys.exit(1)
 
 
 

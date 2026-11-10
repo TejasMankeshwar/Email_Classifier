@@ -21,6 +21,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 # ── Required Settings ──────────────────────────────────────────────────────
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GMAIL_ADDRESS = os.getenv("GMAIL_ADDRESS", "").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
 
 # ── Optional Settings ─────────────────────────────────────────────────────
 EMAIL_BODY_MAX_CHARS = int(os.getenv("EMAIL_BODY_MAX_CHARS", "2000"))

@@ -7,6 +7,7 @@ Sends all emails in a single (or few) batch calls to minimize API usage.
 """
 
 import math
+import random
 import time
 from dataclasses import dataclass
 from typing import Literal
@@ -14,7 +15,7 @@ from typing import Literal
 from google import genai
 from pydantic import BaseModel, Field
 
-from src.config import GEMINI_API_KEY, EMAIL_BODY_MAX_CHARS, logger
+from src.config import GEMINI_API_KEY, GEMINI_MODEL, EMAIL_BODY_MAX_CHARS, logger
 from src.gmail_reader import EmailData
 
 
@@ -172,6 +173,30 @@ def _format_email_for_batch(index: int, email: EmailData) -> str:
     )
 
 
+FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.5-flash-lite"]
+
+
+def _is_transient_error(e: Exception) -> bool:
+    """Check if an error from Gemini API is transient and retryable."""
+    err_str = str(e).upper()
+    transient_indicators = [
+        "429",
+        "RESOURCE_EXHAUSTED",
+        "503",
+        "UNAVAILABLE",
+        "HIGH DEMAND",
+        "500",
+        "INTERNAL",
+        "502",
+        "BAD GATEWAY",
+        "504",
+        "DEADLINE_EXCEEDED",
+        "TIMEOUT",
+        "CONNECTION",
+    ]
+    return any(ind in err_str for ind in transient_indicators)
+
+
 def _classify_batch_call(
     client: genai.Client,
     emails: list[EmailData],
@@ -179,13 +204,14 @@ def _classify_batch_call(
     max_retries: int = 3,
 ) -> list[SingleEmailClassification]:
     """
-    Send a batch of emails to Gemini in a single API call.
+    Send a batch of emails to Gemini in a single API call with automatic retries
+    and fallback model support.
 
     Args:
         client: Initialized Gemini client.
         emails: List of emails in this batch.
         start_index: Starting index for email numbering.
-        max_retries: Max retries on rate-limit errors.
+        max_retries: Max retries per model on transient errors.
 
     Returns:
         List of classifications from the LLM.
@@ -196,32 +222,62 @@ def _classify_batch_call(
         prompt += _format_email_for_batch(start_index + i, email)
     prompt += f"\n--- END OF EMAILS ---\nClassify all {len(emails)} emails above.\n"
 
+    # Candidate models to try in order
+    models_to_try = [GEMINI_MODEL]
+    for fm in FALLBACK_MODELS:
+        if fm not in models_to_try:
+            models_to_try.append(fm)
+
     last_exception = None
-    for attempt in range(max_retries + 1):
-        try:
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt,
-                config={
-                    "response_mime_type": "application/json",
-                    "response_schema": BatchClassificationResponse,
-                },
-            )
-            return response.parsed.classifications
-
-        except Exception as e:
-            last_exception = e
-            error_str = str(e)
-
-            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                wait_time = _parse_retry_delay(error_str, default=20 * (attempt + 1))
-                logger.info(
-                    f"  Rate limited (attempt {attempt + 1}/{max_retries + 1}), "
-                    f"waiting {wait_time:.0f}s..."
+    for model_index, model in enumerate(models_to_try):
+        for attempt in range(max_retries + 1):
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config={
+                        "response_mime_type": "application/json",
+                        "response_schema": BatchClassificationResponse,
+                    },
                 )
-                time.sleep(wait_time)
-            else:
-                raise
+                if response.parsed and response.parsed.classifications:
+                    if model != GEMINI_MODEL:
+                        logger.info(
+                            f"  Successfully classified batch using fallback model {model}"
+                        )
+                    return response.parsed.classifications
+                raise ValueError(f"Empty classifications response from model {model}")
+
+            except Exception as e:
+                last_exception = e
+                error_str = str(e)
+
+                if _is_transient_error(e) and attempt < max_retries:
+                    if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                        wait_time = _parse_retry_delay(
+                            error_str, default=15.0 * (attempt + 1)
+                        )
+                    else:
+                        wait_time = min(60.0, 5.0 * (2**attempt)) + random.uniform(
+                            1.0, 3.0
+                        )
+
+                    logger.warning(
+                        f"  Transient error on {model} (attempt {attempt + 1}/{max_retries + 1}): "
+                        f"{error_str[:120]}... Waiting {wait_time:.1f}s before retry."
+                    )
+                    time.sleep(wait_time)
+                else:
+                    # Non-transient or exhausted retries on this model
+                    if model_index < len(models_to_try) - 1:
+                        next_model = models_to_try[model_index + 1]
+                        logger.warning(
+                            f"  Retries exhausted or non-retryable error on {model}. "
+                            f"Falling back to {next_model}..."
+                        )
+                        break  # Break inner attempt loop to try next model
+                    else:
+                        raise e
 
     if last_exception is not None:
         raise last_exception
@@ -259,7 +315,7 @@ def classify_batch(emails: list[EmailData]) -> list[ClassifiedEmail]:
     total = len(emails)
     num_batches = math.ceil(total / MAX_EMAILS_PER_BATCH)
 
-    logger.info(f"Classifying {total} emails with Gemini 2.5 Flash...")
+    logger.info(f"Classifying {total} emails with {GEMINI_MODEL}...")
     logger.info(f"Using {num_batches} batch call{'s' if num_batches > 1 else ''}")
 
     # Process in batches
@@ -289,10 +345,45 @@ def classify_batch(emails: list[EmailData]) -> list[ClassifiedEmail]:
             )
 
         except Exception as e:
-            logger.error(f"Batch {batch_num + 1}/{num_batches} failed: {e}")
-            raise RuntimeError(
-                "Gemini API quota or limit exhausted. Workflow could not be completed."
-            ) from e
+            logger.error(
+                f"Batch {batch_num + 1}/{num_batches} failed after all retries and fallbacks: {e}"
+            )
+            # Graceful degraded fallback: create placeholder classifications so the digest
+            # can still be generated and delivered rather than dropping the run.
+            for i, email in enumerate(batch_emails):
+                idx = start + i
+                all_classifications[idx] = SingleEmailClassification(
+                    email_index=idx,
+                    priority="Important & Not Urgent",
+                    summary=f"[Classification unavailable - Gemini service error] {email.snippet or email.subject}",
+                    action_items=[],
+                    category="general",
+                )
+
+        # Brief pause between batches to respect rate limits
+        if batch_num < num_batches - 1:
+            time.sleep(15)
+
+    # Assemble results in order
+    results = []
+    for i, email in enumerate(emails):
+        cls = all_classifications.get(i)
+        if cls:
+            classification = EmailClassification(
+                priority=cls.priority,
+                summary=cls.summary,
+                action_items=cls.action_items,
+                category=cls.category,
+            )
+        else:
+            # Email wasn't classified (missing from LLM response)
+            classification = EmailClassification(
+                priority="Not Important",
+                summary=f"Not classified: {email.snippet or email.subject}",
+                action_items=[],
+                category="general",
+            )
+        results.append(ClassifiedEmail(email=email, classification=classification))
 
         # Brief pause between batches to respect rate limits
         if batch_num < num_batches - 1:

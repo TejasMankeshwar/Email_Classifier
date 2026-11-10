@@ -2,8 +2,11 @@ name: Send Daily Email Digest
 
 on:
   schedule:
-  - cron: '0 3 * * *'
-    timezone: 'America/New_York'
+    # GitHub Actions evaluates cron expressions strictly in UTC (the 'timezone' key is not supported).
+    # America/New_York is EST (UTC-5) in winter and EDT (UTC-4) in summer.
+    # 08:17 UTC corresponds to 03:17 AM EST (04:17 AM EDT).
+    # Minute 17 is intentionally chosen to avoid GitHub Actions runner queue delays at :00.
+    - cron: '17 8 * * *'
 
   workflow_dispatch:
 
@@ -50,6 +53,7 @@ jobs:
 
       - name: Run G-lassify Digest
         run: |
+          set -o pipefail
           mkdir -p logs
           python -m src.main 2>&1 | tee logs/glassify.log
         env:
