@@ -34,8 +34,12 @@ class SingleEmailClassification(BaseModel):
     ] = Field(
         description=(
             "Priority level: 'Important & Urgent' for emails requiring action today, "
-            "'Important & Not Urgent' for notable emails without immediate deadlines, "
-            "'Not Important' for promotions, newsletters, social notifications, etc."
+            "internship/job decisions (rejections, acceptances, offers), internship action items "
+            "(online assessments, interview invitations/scheduling, candidate verification), "
+            "direct replies from recruiters/companies, or urgent personal/financial/security alerts; "
+            "'Important & Not Urgent' for notable emails without urgent deadlines, including standard "
+            "internship 'thanks for applying' / application received confirmations; "
+            "'Not Important' for promotions, marketing, newsletters, social notifications, bulk digests."
         )
     )
     summary: str = Field(
@@ -89,53 +93,68 @@ class ClassifiedEmail:
 
 BATCH_PROMPT_HEADER = """\
 You are an intelligent email assistant for a personal inbox. You will receive a list of emails.
-Classify EACH email into one of three priority levels.
+Classify EACH email into one of three priority levels:
+- "Important & Urgent"
+- "Important & Not Urgent"
+- "Not Important"
 
 ## CRITICAL RULES FOR CLASSIFICATION
 
-### "Important & Urgent" — ONLY for emails that meet ALL of these criteria:
-- The email is PERSONALLY addressed to the user (not a mass/bulk email)
-- There is a REAL, SPECIFIC deadline or required action within 24-48 hours
-- Failing to act would have REAL CONSEQUENCES (financial loss, missed appointment, security breach)
+### 1. "Important & Urgent"
+Classify an email as "Important & Urgent" if it falls into ANY of these categories:
 
-**Examples that ARE Important & Urgent:**
-- A bank alert about a transaction YOU made (verify/dispute)
-- An interview confirmation requiring YOUR response
-- A tuition payment deadline with YOUR name and amount
-- An account security alert (new sign-in, 2FA change) for YOUR account
+#### A. Internship & Job Applications (HIGH PRIORITY RULES):
+- **Rejections:** ANY email stating an application was rejected, not selected, not moving forward, or closed (even if the subject politely begins with "Thanks for applying" or "Application Update"). The user MUST see rejections in Important & Urgent.
+- **Acceptances & Offers:** Job/internship offers, offer letters, or advancement to subsequent interview rounds.
+- **Action-Demanding Application Steps:** Emails requiring the user to take a specific action or meet a deadline:
+  * Online Assessments / coding challenges / take-home tests (e.g. HackerRank, CodeSignal, LeetCode, HireVue).
+  * Candidate portal setup or account verification (e.g. "Verify your candidate account within 24 hours").
+  * Requests to submit transcripts, references, or work samples.
+- **Interview Invitations & Scheduling:** Requests to schedule or confirm an interview, technical screen, or recruiter chat.
+- **Company & Recruiter Direct Replies:** Any direct, personalized email or follow-up from a human recruiter, hiring manager, or company representative regarding the user's application.
 
-**Examples that are NOT Important & Urgent (even if they use urgent language):**
-- "LAST CHANCE to join..." → Marketing email, Not Important
-- "URGENT: Your scholarship test starts in 15 mins" from a mass mailer → Not Important (promotional)
-- "Last 10 days to apply for X Scholarship" → Promotion, Not Important
-- "Download your file before it gets removed" from a service → Not Important (automated notification)
-- "New jobs available" → Not Important (job board notification)
-- "After tonight you're on your own" → Marketing scare tactic, Not Important
-- "Order shipped/delivered/out for delivery" → Important & Not Urgent (automated tracking)
-- File sharing notifications → Important & Not Urgent at most
+#### B. General Urgent Personal Matters:
+- Bank or financial alerts about transactions to verify/dispute or immediate payment deadlines.
+- Account security alerts (new sign-ins, 2FA changes, password reset requests).
+- Personally addressed emails with a real, specific deadline or required action within 24–48 hours where failing to act has real consequences.
 
-### "Important & Not Urgent" — Personal or account-related, but no immediate deadline:
-- Security notifications about YOUR accounts (new sign-in, 2FA enabled, app authorized)
-- Financial statements or balance reports
-- GitHub/Vercel/service notifications about YOUR projects
-- Personal messages from real people you know
-- Family link / device management alerts
+---
 
-### "Not Important" — Everything else:
-- Marketing emails, regardless of how "urgent" the language is
-- Newsletters, digests, and automated roundups
-- Promotional offers, sales, and discount codes
-- Job board bulk notifications
-- University admissions marketing
-- Course/webinar promotions
-- Order tracking (shipped, delivered, out for delivery)
-- App/product update announcements
-- Social media notifications
+### 2. "Important & Not Urgent"
+Classify an email as "Important & Not Urgent" if it is important/relevant to the user, but does NOT require immediate action today:
 
-## KEY DISTINCTION
-The #1 mistake to avoid: DO NOT classify mass/bulk marketing emails as "Important & Urgent" just because they use urgency language like "LAST CHANCE", "URGENT", "limited time", "expires tonight", "don't miss out". These are MANUFACTURED urgency tactics. If the email was sent to thousands of people, it is NOT urgent for this specific user.
+#### A. Standard Internship "Thanks for Applying" / Application Received:
+- **Routine Application Confirmations:** Automated emails confirming that an application was received or submitted successfully (e.g., "Thank you for applying to [Company]", "Application received for [Role]", "Got it! We received your application", "Application submitted successfully") where **NO rejection/acceptance decision is conveyed** and **NO assessment/interview action is demanded**.
+- **RULE:** These emails are informative confirmations and belong in **"Important & Not Urgent"** (category: recruitment), NEVER in "Important & Urgent".
 
-Think step by step: (1) Is this a mass/bulk email or personally directed? (2) Is there a real consequence for THIS user specifically? (3) Is the deadline real and imminent?
+#### B. Other Important & Not Urgent Emails:
+- Account/service confirmations (e.g. 2FA enabled, third-party app authorized).
+- Financial statements, receipts, and balance reports.
+- GitHub, Vercel, or cloud service notifications for the user's projects.
+- Personal correspondence from real people that does not have an urgent deadline.
+
+---
+
+### 3. "Not Important" — Everything Else:
+- Mass marketing and promotional emails, regardless of simulated urgency ("LAST CHANCE", "URGENT", "limited time", "expires tonight").
+- Automated newsletters, weekly digests, and promotional roundups.
+- Job board bulk emails and generic job listings ("10 new jobs matching your search").
+- Social media notifications and network updates.
+- University marketing, course promotions, and webinar invitations.
+- Shipping and order tracking notifications (shipped, out for delivery).
+
+---
+
+## KEY DISTINCTIONS SUMMARY (AVOID THESE COMMON MISTAKES):
+1. **Internship Confirmation vs. Rejection/Action:**
+   - "Thank you for applying to Google" (pure acknowledgment, no action or decision) → **Important & Not Urgent**
+   - "NATIONAL GRID - Thanks for applying! ... not progressing your application" → **Important & Urgent** (Rejection!)
+   - "T-Mobile: Verify your candidate account" → **Important & Urgent** (Action required!)
+   - "Amazon: Complete your Online Assessment within 5 days" → **Important & Urgent** (Action required!)
+   - "Recruiter: We would love to set up a 15-minute phone screen" → **Important & Urgent** (Interview/Company reply!)
+   - "Tesla: Congratulations, we would like to offer you..." → **Important & Urgent** (Acceptance/Offer!)
+2. **Manufactured Urgency:**
+   - If an email was sent to thousands of recipients promoting a product or course with "URGENT" in the subject, it is NOT urgent. Mark it **Not Important**.
 
 For each email, provide:
 - email_index: The index number from the list below
