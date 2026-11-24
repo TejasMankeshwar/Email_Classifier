@@ -12,13 +12,14 @@ import argparse
 import sys
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 # Ensure project root is on the path when run as a module
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.config import validate_config, GMAIL_ADDRESS, logger
+from src.config import validate_config, GMAIL_ADDRESS, TIMEZONE, logger
 from src.auth import get_gmail_service
-from src.gmail_reader import fetch_recent_emails
+from src.gmail_reader import fetch_recent_emails, was_digest_sent_today
 from src.classifier import classify_batch
 from src.digest_builder import build_digest
 from src.gmail_sender import send_digest
@@ -48,11 +49,20 @@ def run_account_pipeline(token_path: Path, args) -> bool:
         logger.error(f"No recipient email address available for {token_path.name}.")
         return False
 
+    now = datetime.now(ZoneInfo(TIMEZONE))
+    date_str = now.strftime("%B %d")
+
+    if not args.dry_run and not args.force and was_digest_sent_today(service, date_str):
+        logger.info(
+            f"Digest for {date_str} already sent to {auth_email or token_path.name}. "
+            "Skipping to avoid duplicates (use --force to override)."
+        )
+        return True
+
     # Step 3: Fetch recent emails
     logger.info(f"Fetching emails from the last {args.hours} hours...")
     emails = fetch_recent_emails(service, hours=args.hours)
 
-    now = datetime.now()
     if not emails:
         logger.info(f"No emails found for {auth_email or token_path.name}.")
         if not args.dry_run:
@@ -158,6 +168,11 @@ Examples:
         type=str,
         default=None,
         help="Override recipient email address for sending digest",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Send digest even if one was already sent today",
     )
     args = parser.parse_args()
 

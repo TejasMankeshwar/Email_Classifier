@@ -39,6 +39,29 @@ class EmailData:
         return f"https://mail.google.com/mail/u/0/#inbox/{self.message_id}"
 
 
+def was_digest_sent_today(service, date_str: str, lookback_hours: int = 20) -> bool:
+    """
+    Check if a digest email for `date_str` was already sent recently.
+
+    Prevents duplicate digests when multiple triggers (e.g., cron-job.org
+    workflow_dispatch at 7:00 AM EST and backup GitHub Actions schedule) fire
+    on the same day.
+    """
+    cutoff_epoch = int(time.time()) - (lookback_hours * 3600)
+    query = f'subject:"Daily Email Summary – {date_str}" after:{cutoff_epoch}'
+    try:
+        results = (
+            service.users()
+            .messages()
+            .list(userId="me", q=query, maxResults=1)
+            .execute()
+        )
+        return len(results.get("messages", [])) > 0
+    except Exception as e:
+        logger.warning(f"Could not check for existing digest: {e}")
+        return False
+
+
 def fetch_recent_emails(service, hours: int = 24) -> list[EmailData]:
     """
     Fetch all emails received in the last `hours` hours.

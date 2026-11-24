@@ -192,12 +192,17 @@ def _format_email_for_batch(index: int, email: EmailData) -> str:
     )
 
 
-FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.5-flash-lite"]
+FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"]
 
 
 def _is_transient_error(e: Exception) -> bool:
     """Check if an error from Gemini API is transient and retryable."""
     err_str = str(e).upper()
+    # If the model has zero quota or daily quota is exhausted, retrying the same
+    # model is pointless — fall back to the next model immediately.
+    if "LIMIT: 0" in err_str or "PERDAY" in err_str:
+        return False
+
     transient_indicators = [
         "429",
         "RESOURCE_EXHAUSTED",
@@ -220,7 +225,7 @@ def _classify_batch_call(
     client: genai.Client,
     emails: list[EmailData],
     start_index: int,
-    max_retries: int = 3,
+    max_retries: int = 2,
 ) -> list[SingleEmailClassification]:
     """
     Send a batch of emails to Gemini in a single API call with automatic retries
@@ -276,8 +281,18 @@ def _classify_batch_call(
                         wait_time = _parse_retry_delay(
                             error_str, default=15.0 * (attempt + 1)
                         )
+                        if wait_time is None:
+                            # Suggested retry delay is too long (e.g., hours); fall back now.
+                            if model_index < len(models_to_try) - 1:
+                                next_model = models_to_try[model_index + 1]
+                                logger.warning(
+                                    f"  Rate limit retry delay on {model} is too long. "
+                                    f"Falling back to {next_model}..."
+                                )
+                                break
+                            raise e
                     else:
-                        wait_time = min(60.0, 5.0 * (2**attempt)) + random.uniform(
+                        wait_time = min(45.0, 5.0 * (2**attempt)) + random.uniform(
                             1.0, 3.0
                         )
 
@@ -303,13 +318,18 @@ def _classify_batch_call(
     raise RuntimeError("Batch classification failed without raising any exceptions.")
 
 
-def _parse_retry_delay(error_str: str, default: float = 20.0) -> float:
-    """Extract the suggested retry delay from a Gemini 429 error message."""
+def _parse_retry_delay(error_str: str, default: float = 20.0, max_wait: float = 60.0) -> float | None:
+    """Extract the suggested retry delay from a Gemini 429 error message.
+
+    Returns None if the suggested delay exceeds max_wait so the caller can
+    immediately fall back to another model instead of sleeping for hours.
+    """
     import re
 
     match = re.search(r"retry in (\d+(?:\.\d+)?)s", error_str, re.IGNORECASE)
     if match:
-        return float(match.group(1)) + 2  # Add 2s buffer
+        delay = float(match.group(1)) + 2
+        return None if delay > max_wait else delay
     return default
 
 

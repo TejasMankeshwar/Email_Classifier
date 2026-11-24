@@ -2,11 +2,10 @@ name: Send Daily Email Digest
 
 on:
   schedule:
-    # GitHub Actions evaluates cron expressions strictly in UTC (the 'timezone' key is not supported).
-    # America/New_York is EST (UTC-5) in winter and EDT (UTC-4) in summer.
-    # 08:17 UTC corresponds to 03:17 AM EST (04:17 AM EDT).
-    # Minute 17 is intentionally chosen to avoid GitHub Actions runner queue delays at :00.
-    - cron: '17 8 * * *'
+    # Backup schedule only: GitHub Actions cron queues free-tier schedules by 7–12 hours.
+    # For exact 7:00 AM EST delivery, trigger `workflow_dispatch` via an external scheduler
+    # (e.g., cron-job.org). Duplicate-digest protection prevents double sends.
+    - cron: '17 11 * * *'
 
   workflow_dispatch:
 

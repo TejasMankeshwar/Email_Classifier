@@ -9,7 +9,7 @@ from datetime import datetime
 from jinja2 import Environment, FileSystemLoader
 
 from src.classifier import ClassifiedEmail
-from src.config import TEMPLATES_DIR, logger
+from src.config import GEMINI_MODEL, TEMPLATES_DIR, logger
 
 
 def build_digest(classified_emails: list[ClassifiedEmail], date: datetime | None = None) -> str:
@@ -86,6 +86,7 @@ def build_digest(classified_emails: list[ClassifiedEmail], date: datetime | None
         urgent_count=urgent_count,
         important_count=important_count,
         executive_summary=executive_summary,
+        model_name=GEMINI_MODEL.replace("-", " ").title(),
     )
 
     logger.info(
