@@ -62,22 +62,79 @@ def was_digest_sent_today(service, date_str: str, lookback_hours: int = 20) -> b
         return False
 
 
-def fetch_recent_emails(service, hours: int = 24) -> list[EmailData]:
+def get_last_digest_timestamp(service, max_lookback_hours: int = 168) -> int | None:
     """
-    Fetch all emails received in the last `hours` hours.
+    Find the Unix epoch timestamp (in seconds) of the most recently sent digest email.
+
+    Caps the returned timestamp to at most `max_lookback_hours` ago (default: 7 days)
+    to prevent fetching thousands of emails if the digest was paused for a long time.
+    Returns None if no previous digest is found.
+    """
+    try:
+        results = (
+            service.users()
+            .messages()
+            .list(userId="me", q='in:sent subject:"Daily Email Summary –"', maxResults=1)
+            .execute()
+        )
+        messages = results.get("messages", [])
+        if not messages:
+            return None
+
+        msg = (
+            service.users()
+            .messages()
+            .get(userId="me", id=messages[0]["id"], format="minimal")
+            .execute()
+        )
+        internal_ms = msg.get("internalDate")
+        if not internal_ms:
+            return None
+
+        last_epoch = int(internal_ms) // 1000
+        min_epoch = int(time.time()) - (max_lookback_hours * 3600)
+        if last_epoch < min_epoch:
+            logger.info(
+                f"Last digest was over {max_lookback_hours}h ago; capping lookback to {max_lookback_hours}h."
+            )
+            return min_epoch
+        return last_epoch
+    except Exception as e:
+        logger.warning(f"Could not determine last digest timestamp: {e}")
+        return None
+
+
+def fetch_recent_emails(
+    service,
+    hours: int | None = 24,
+    since_epoch: int | None = None,
+) -> list[EmailData]:
+    """
+    Fetch all emails received since `since_epoch` or in the last `hours` hours.
 
     Args:
         service: Authorized Gmail API service object.
-        hours: How many hours back to look (default: 24).
+        hours: How many hours back to look if `since_epoch` is not provided (default: 24).
+        since_epoch: Optional Unix epoch timestamp (seconds) of the last digest.
 
     Returns:
         List of EmailData objects with parsed content.
     """
-    # Calculate the epoch timestamp for the cutoff
-    cutoff_epoch = int(time.time()) - (hours * 3600)
+    if since_epoch is not None:
+        # +1s avoids re-matching the previous digest timestamp boundary
+        cutoff_epoch = since_epoch + 1
+        since_dt = datetime.fromtimestamp(cutoff_epoch, tz=timezone.utc).strftime(
+            "%Y-%m-%d %H:%M UTC"
+        )
+        desc = f"since last digest ({since_dt})"
+    else:
+        effective_hours = hours if hours is not None else 24
+        cutoff_epoch = int(time.time()) - (effective_hours * 3600)
+        desc = f"from the last {effective_hours} hours"
+
     query = f"after:{cutoff_epoch}"
 
-    logger.info(f"Fetching emails from the last {hours} hours (query: {query})")
+    logger.info(f"Fetching emails {desc} (query: {query})")
 
     # Paginate through all matching messages
     message_ids = []
@@ -97,7 +154,7 @@ def fetch_recent_emails(service, hours: int = 24) -> list[EmailData]:
         if not page_token:
             break
 
-    logger.info(f"Found {len(message_ids)} emails in the last {hours} hours")
+    logger.info(f"Found {len(message_ids)} emails {desc}")
 
     if not message_ids:
         return []
@@ -108,6 +165,8 @@ def fetch_recent_emails(service, hours: int = 24) -> list[EmailData]:
         try:
             email_data = _fetch_and_parse_message(service, msg_id)
             if email_data:
+                if email_data.subject.startswith("Daily Email Summary –"):
+                    continue
                 emails.append(email_data)
             if i % 10 == 0:
                 logger.debug(f"Processed {i}/{len(message_ids)} emails...")

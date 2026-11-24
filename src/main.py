@@ -19,7 +19,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.config import validate_config, GMAIL_ADDRESS, TIMEZONE, logger
 from src.auth import get_gmail_service
-from src.gmail_reader import fetch_recent_emails, was_digest_sent_today
+from src.gmail_reader import (
+    fetch_recent_emails,
+    get_last_digest_timestamp,
+    was_digest_sent_today,
+)
 from src.classifier import classify_batch
 from src.digest_builder import build_digest
 from src.gmail_sender import send_digest
@@ -59,9 +63,17 @@ def run_account_pipeline(token_path: Path, args) -> bool:
         )
         return True
 
-    # Step 3: Fetch recent emails
-    logger.info(f"Fetching emails from the last {args.hours} hours...")
-    emails = fetch_recent_emails(service, hours=args.hours)
+    # Step 3: Fetch recent emails (explicit --hours overrides last-digest lookup)
+    if args.hours is not None:
+        logger.info(f"Fetching emails from the last {args.hours} hours...")
+        emails = fetch_recent_emails(service, hours=args.hours)
+    else:
+        last_ts = get_last_digest_timestamp(service)
+        if last_ts is not None:
+            emails = fetch_recent_emails(service, since_epoch=last_ts)
+        else:
+            logger.info("No previous digest found; falling back to the last 24 hours...")
+            emails = fetch_recent_emails(service, hours=24)
 
     if not emails:
         logger.info(f"No emails found for {auth_email or token_path.name}.")
@@ -138,8 +150,8 @@ Examples:
     parser.add_argument(
         "--hours",
         type=int,
-        default=24,
-        help="Number of hours to look back for emails (default: 24)",
+        default=None,
+        help="Number of hours to look back (default: since last digest, or 24h if none found)",
     )
     parser.add_argument(
         "--dry-run",
