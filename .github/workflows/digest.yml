@@ -2,10 +2,11 @@ name: Send Daily Email Digest
 
 on:
   schedule:
-    # Backup schedule only: GitHub Actions cron queues free-tier schedules by 7–12 hours.
-    # For exact 7:00 AM EST delivery, trigger `workflow_dispatch` via an external scheduler
-    # (e.g., cron-job.org). Duplicate-digest protection prevents double sends.
-    - cron: '17 11 * * *'
+    # Target delivery: 7:00 AM EST (12:00 UTC).
+    # GitHub Actions free-tier `schedule` triggers consistently experience 7–12h queue delays
+    # (historically ~8.5h median). Scheduling at 03:37 UTC (~10:37 PM EST) accounts for this
+    # delay so the job actually runs around 5:30–8:30 AM EST. Off-peak minute (:37) avoids :00/:30 spikes.
+    - cron: '37 3 * * *'
 
   workflow_dispatch:
 
